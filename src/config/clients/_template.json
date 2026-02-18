@@ -1,0 +1,34 @@
+{
+  "clientName": "Client Name",
+  "campaignName": "Campaign Name",
+  "dateRange": "Start - End, Year",
+  "logo": "/logos/client-logo.png",
+  "branding": {
+    "primaryColor": "#3B82F6",
+    "secondaryColor": "#10B981",
+    "accentColor": "#F59E0B",
+    "backgroundColor": "#0F172A",
+    "surfaceColor": "#1E293B",
+    "textColor": "#F8FAFC",
+    "textMuted": "#94A3B8",
+    "borderColor": "#334155"
+  },
+  "dataSources": {
+    "general": "",
+    "audiences": "",
+    "creative": "",
+    "channel": "",
+    "conversionTypes": "",
+    "dailyConversions": "",
+    "ltvInsights": "",
+    "topStations": "",
+    "ltvByDay": "",
+    "education": "",
+    "income": "",
+    "interests": "",
+    "prizm": "",
+    "sitesOlvDisplay": ""
+  },
+  "provinces": [],
+  "channelTypes": ["CTV", "OLV", "Display", "Retargeting"]
+}

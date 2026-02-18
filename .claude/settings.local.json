@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(echo:*)",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\")",
+      "Bash(node --version:*)",
+      "Bash(npm --version:*)",
+      "Bash(mdfind:*)",
+      "Bash(curl:*)",
+      "Bash(sudo installer:*)",
+      "Bash(export PATH=\"/usr/local/bin:$PATH\")",
+      "Bash(npm run build:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(bash -c:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(npx vite build)",
+      "Bash(ls:*)",
+      "Bash(shuf:*)",
+      "Bash(sort:*)",
+      "Bash(node:*)",
+      "Bash(find:*)"
+    ]
+  }
+}

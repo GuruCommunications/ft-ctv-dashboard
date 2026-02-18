@@ -1,0 +1,34 @@
+{
+  "clientName": "Fountain Tire",
+  "campaignName": "Fall 2025 Campaign - Promo 3",
+  "dateRange": "Oct 21 - Dec 14, 2025",
+  "logo": "/logos/fountain-tire.png",
+  "branding": {
+    "primaryColor": "#1A3A6B",
+    "secondaryColor": "#D32F2F",
+    "accentColor": "#F59E0B",
+    "backgroundColor": "#F5F7FA",
+    "surfaceColor": "#FFFFFF",
+    "textColor": "#1E293B",
+    "textMuted": "#64748B",
+    "borderColor": "#E2E8F0"
+  },
+  "dataSources": {
+    "general": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=206078436",
+    "audiences": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=341336068",
+    "creative": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1001387046",
+    "channel": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=439577212",
+    "conversionTypes": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1252572469",
+    "dailyConversions": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1826162746",
+    "ltvInsights": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1509724657",
+    "topStations": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=794663274",
+    "ltvByDay": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1091640792",
+    "education": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=451013526",
+    "income": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1099246910",
+    "interests": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1501736172",
+    "prizm": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=2142261576",
+    "sitesOlvDisplay": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8bjhgakm5VZ3wpyaNTXpuJipIECkmArmwcUEZ3XuVwWpCu_reX4pWWcAsCHzbnzeV3mbEhMyDZbU/pub?output=csv&gid=1993132399"
+  },
+  "provinces": ["AB", "BC", "ON", "SK&MB&YUK"],
+  "channelTypes": ["CTV", "OLV", "Display", "Retargeting"]
+}
