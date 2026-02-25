@@ -1,6 +1,4 @@
-import Papa from 'papaparse';
-
-// Fuzzy column name matching
+// ─── Column alias map ───
 const COLUMN_ALIASES = {
   impressions: ['Impressions', 'Imps', 'impressions', 'imps'],
   cost: ['Cost', 'Spend', 'cost', 'spend'],
@@ -36,7 +34,6 @@ export function resolveColumn(headers, alias) {
   for (const candidate of candidates) {
     if (headers.includes(candidate)) return candidate;
   }
-  // Try case-insensitive match
   const lowerCandidates = candidates.map(c => c.toLowerCase());
   for (const header of headers) {
     if (lowerCandidates.includes(header.toLowerCase())) return header;
@@ -52,13 +49,12 @@ export function resolveColumns(headers) {
   return map;
 }
 
+// ─── Value cleaning ───
 function cleanValue(value) {
   if (value == null || value === '') return null;
   if (typeof value === 'number') return value;
   const str = String(value).trim();
-  // Strip currency symbols and commas
   const cleaned = str.replace(/[$,]/g, '');
-  // Handle percentage
   if (str.endsWith('%')) {
     const num = parseFloat(str.replace('%', ''));
     return isNaN(num) ? str : num / 100;
@@ -67,33 +63,48 @@ function cleanValue(value) {
   return isNaN(num) ? str : num;
 }
 
-function getFieldValue(row, colMap, alias) {
-  const colName = colMap[alias];
-  if (!colName) return null;
-  return row[colName] != null ? row[colName] : null;
-}
-
+// ─── Field accessors ───
+// Data is pre-cleaned during fetch, so getNumericField only does a type check.
 export function getNumericField(row, colMap, alias) {
-  const val = getFieldValue(row, colMap, alias);
+  const colName = colMap[alias];
+  if (!colName) return 0;
+  const val = row[colName];
   if (val == null) return 0;
-  const cleaned = cleanValue(val);
-  return typeof cleaned === 'number' ? cleaned : 0;
+  return typeof val === 'number' ? val : 0;
 }
 
-// Convert a 2D array (from Apps Script proxy) to row objects
+/** Compute VCR: prefer the raw VCR column, fall back to completions/starts */
+export function computeVCR(row, colMap) {
+  const vcrVal = getNumericField(row, colMap, 'vcr');
+  if (vcrVal > 0) return vcrVal;
+  const starts = getNumericField(row, colMap, 'videoStarts');
+  const comps = getNumericField(row, colMap, 'videoCompletions');
+  return starts > 0 ? comps / starts : 0;
+}
+
+/** Aggregate a metric by a dimension key across filtered rows */
+export function aggregateByDimension(rows, colMap, dimensionFn, metricAlias) {
+  const agg = {};
+  for (const row of rows) {
+    const key = dimensionFn(row);
+    agg[key] = (agg[key] || 0) + getNumericField(row, colMap, metricAlias);
+  }
+  return Object.entries(agg)
+    .filter(([, v]) => v > 0)
+    .map(([name, value]) => ({ name, value }));
+}
+
+// ─── 2D array → row objects ───
 function arrayToRows(arr) {
   if (!Array.isArray(arr) || arr.length < 2) return { data: [], headers: [] };
   const headers = arr[0].map(h => String(h).trim());
   const data = [];
   for (let i = 1; i < arr.length; i++) {
     const row = arr[i];
-    // Skip empty rows
     if (!row || row.every(cell => cell === '' || cell == null)) continue;
     const obj = {};
     for (let j = 0; j < headers.length; j++) {
       let val = j < row.length ? row[j] : null;
-      // Apps Script serializes Date objects as ISO strings — preserve as-is
-      // Numbers come through as actual numbers — no cleaning needed
       if (val === '') val = null;
       obj[headers[j]] = val;
     }
@@ -102,12 +113,22 @@ function arrayToRows(arr) {
   return { data, headers };
 }
 
-// Fetch data from the Apps Script proxy (JSON 2D array response)
+/** Clear all sheet data caches from localStorage */
+function clearSheetCaches() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith('csv_cache_')) localStorage.removeItem(k);
+    }
+  } catch { /* localStorage unavailable */ }
+}
+
+// ─── Fetch from Apps Script proxy ───
 export async function fetchSheet(proxyUrl, token, gid) {
   const url = `${proxyUrl}?token=${encodeURIComponent(token)}&gid=${gid}`;
   const cacheKey = `csv_cache_${gid}`;
   const cacheTimeKey = `csv_cache_time_${gid}`;
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  const CACHE_DURATION = 5 * 60 * 1000;
 
   // Check cache
   try {
@@ -116,9 +137,9 @@ export async function fetchSheet(proxyUrl, token, gid) {
       const cached = localStorage.getItem(cacheKey);
       if (cached) return JSON.parse(cached);
     }
-  } catch { /* Cache read failed, continue with fetch */ }
+  } catch { /* cache read failed, continue */ }
 
-  // Fetch with retry
+  // Fetch with exponential backoff
   let lastError;
   const delays = [0, 2000, 4000, 8000];
   for (const delay of delays) {
@@ -135,10 +156,9 @@ export async function fetchSheet(proxyUrl, token, gid) {
       const colMap = resolveColumns(headers);
 
       // Preserve date/time columns as-is; clean everything else
-      const dateColName = colMap.date;
-      const timeColName = colMap.timeOfConversion;
-      const skipClean = new Set([dateColName, timeColName].filter(Boolean));
-
+      const skipClean = new Set(
+        [colMap.date, colMap.timeOfConversion].filter(Boolean)
+      );
       const data = rawData.map(row => {
         const cleaned = { ...row };
         for (const key of Object.keys(cleaned)) {
@@ -151,19 +171,14 @@ export async function fetchSheet(proxyUrl, token, gid) {
 
       const output = { data, headers, colMap };
 
-      // Cache (skip large datasets)
+      // Cache (skip very large datasets)
       try {
         if (data.length <= 5000) {
           localStorage.setItem(cacheKey, JSON.stringify(output));
           localStorage.setItem(cacheTimeKey, String(Date.now()));
         }
       } catch {
-        try {
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const k = localStorage.key(i);
-            if (k?.startsWith('csv_cache_')) localStorage.removeItem(k);
-          }
-        } catch { /* ignore */ }
+        clearSheetCaches();
       }
 
       return output;
@@ -179,84 +194,7 @@ export async function fetchSheet(proxyUrl, token, gid) {
       if (import.meta.env.DEV) console.warn(`[csvParser] Fetch failed for gid=${gid}, using stale cache`);
       return { ...JSON.parse(cached), stale: true };
     }
-  } catch { /* No cache available */ }
-
-  throw lastError;
-}
-
-// Legacy: Fetch from direct CSV URL (kept as fallback)
-export async function fetchCSV(url) {
-  if (!url) return { data: [], headers: [] };
-
-  const cacheKey = `csv_cache_${url}`;
-  const cacheTimeKey = `csv_cache_time_${url}`;
-  const CACHE_DURATION = 5 * 60 * 1000;
-
-  try {
-    const cachedTime = localStorage.getItem(cacheTimeKey);
-    if (cachedTime && Date.now() - parseInt(cachedTime) < CACHE_DURATION) {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) return JSON.parse(cached);
-    }
-  } catch { /* continue */ }
-
-  let lastError;
-  const delays = [0, 2000, 4000, 8000];
-  for (const delay of delays) {
-    if (delay > 0) await new Promise(r => setTimeout(r, delay));
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = await response.text();
-      const result = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });
-
-      if (!result.data || result.data.length === 0) return { data: [], headers: [] };
-
-      const headers = result.meta.fields || [];
-      const colMap = resolveColumns(headers);
-      const dateColName = colMap.date;
-      const timeColName = colMap.timeOfConversion;
-      const skipClean = new Set([dateColName, timeColName].filter(Boolean));
-
-      const data = result.data.map(row => {
-        const cleaned = { ...row };
-        for (const key of Object.keys(cleaned)) {
-          if (typeof cleaned[key] === 'string' && !skipClean.has(key)) {
-            cleaned[key] = cleanValue(cleaned[key]);
-          }
-        }
-        return cleaned;
-      });
-
-      const output = { data, headers, colMap };
-
-      try {
-        if (data.length <= 5000) {
-          localStorage.setItem(cacheKey, JSON.stringify(output));
-          localStorage.setItem(cacheTimeKey, String(Date.now()));
-        }
-      } catch {
-        try {
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const k = localStorage.key(i);
-            if (k?.startsWith('csv_cache_')) localStorage.removeItem(k);
-          }
-        } catch { /* ignore */ }
-      }
-
-      return output;
-    } catch (e) {
-      lastError = e;
-    }
-  }
-
-  try {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      if (import.meta.env.DEV) console.warn(`[csvParser] Fetch failed for ${url}, using stale cache`);
-      return { ...JSON.parse(cached), stale: true };
-    }
-  } catch { /* No cache */ }
+  } catch { /* no cache available */ }
 
   throw lastError;
 }

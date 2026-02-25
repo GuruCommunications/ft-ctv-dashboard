@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { getChartColors } from '../../utils/theme';
 import { formatCompact, formatPercent } from '../../utils/formatters';
@@ -32,7 +33,7 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
   );
 };
 
-export default function DonutChart({ data, dataKey = 'value', nameKey = 'name', height = 350, title, formatter, branding }) {
+export default memo(function DonutChart({ data, dataKey = 'value', nameKey = 'name', height = 350, title, formatter, branding }) {
   const colors = getChartColors(branding);
 
   if (!data?.length) return null;
@@ -69,4 +70,4 @@ export default function DonutChart({ data, dataKey = 'value', nameKey = 'name', 
       </ResponsiveContainer>
     </div>
   );
-}
+});

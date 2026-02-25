@@ -5,4 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: '/ft-ctv-dashboard/',
+  build: {
+    sourcemap: false, // Never expose source in production
+  },
 })

@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import KPICard from '../charts/KPICard';
 import BarChartComponent from '../charts/BarChart';
 import DataTable from '../charts/DataTable';
 import EmptyState from '../ui/EmptyState';
@@ -31,21 +30,13 @@ export default function GeographicView({ sheetData, filters, branding }) {
     }
 
     return Object.values(agg)
-      .map(p => ({
-        ...p,
-        vcr: p.videoStarts > 0 ? p.videoCompletions / p.videoStarts : 0,
-      }))
+      .map(p => ({ ...p, vcr: p.videoStarts > 0 ? p.videoCompletions / p.videoStarts : 0 }))
       .sort((a, b) => b.impressions - a.impressions);
   }, [general, filters]);
 
   if (!provinceData.length) return <EmptyState message="No geographic data available" />;
 
-  const chartData = provinceData.map(p => ({
-    name: p.label,
-    impressions: p.impressions,
-    spend: p.spend,
-    conversions: p.conversions,
-  }));
+  const chartData = provinceData.map(p => ({ name: p.label, impressions: p.impressions, spend: p.spend, conversions: p.conversions }));
 
   const columns = [
     { key: 'label', label: 'Province' },
@@ -58,9 +49,8 @@ export default function GeographicView({ sheetData, filters, branding }) {
 
   return (
     <div className="space-y-12">
-      {/* Province cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4" style={{ gap: '24px' }}>
-        {provinceData.filter(p => p.province !== 'Unknown').map((prov, i) => (
+        {provinceData.filter(p => p.province !== 'Unknown').map(prov => (
           <div key={prov.province} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-8 space-y-5">
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-[var(--color-primary)]" />
@@ -88,25 +78,9 @@ export default function GeographicView({ sheetData, filters, branding }) {
         ))}
       </div>
 
-      {/* Comparison chart */}
-      <BarChartComponent
-        data={chartData}
-        bars={[
-          { key: 'impressions', label: 'Impressions' },
-          { key: 'conversions', label: 'Conversions' },
-        ]}
-        xKey="name"
-        title="Province Comparison"
-        branding={branding}
-      />
+      <BarChartComponent data={chartData} bars={[{ key: 'impressions', label: 'Impressions' }, { key: 'conversions', label: 'Conversions' }]} xKey="name" title="Province Comparison" branding={branding} />
 
-      {/* Full table */}
-      <DataTable
-        data={provinceData}
-        columns={columns}
-        title="Province-Level Summary"
-        defaultSort={{ key: 'impressions', direction: 'desc' }}
-      />
+      <DataTable data={provinceData} columns={columns} title="Province-Level Summary" defaultSort={{ key: 'impressions', direction: 'desc' }} />
     </div>
   );
 }

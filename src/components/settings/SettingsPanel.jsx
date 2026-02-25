@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Check, X, Copy, TestTube } from 'lucide-react';
+import { safeParseJSON, stripSecrets, isAllowedProxyUrl, isValidGid } from '../../utils/helpers';
 
 const SHEET_LABELS = {
   general: 'General (Line Items)',
@@ -29,16 +30,7 @@ const BRANDING_FIELDS = [
   { key: 'borderColor', label: 'Border Color' },
 ];
 
-function safeParseJSON(str, fallback) {
-  try {
-    return str ? JSON.parse(str) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export default function SettingsPanel({ config, onConfigChange }) {
-  // Issue #2: Safe JSON.parse, Issue #24: Remove redundant useEffect
   const [localConfig, setLocalConfig] = useState(() => {
     return safeParseJSON(localStorage.getItem('dashboard_config'), config);
   });
@@ -59,31 +51,53 @@ export default function SettingsPanel({ config, onConfigChange }) {
   };
 
   const save = () => {
-    localStorage.setItem('dashboard_config', JSON.stringify(localConfig));
+    // Validate proxyUrl if present
+    if (localConfig.proxyUrl && !isAllowedProxyUrl(localConfig.proxyUrl)) {
+      alert('Proxy URL must be a Google Apps Script URL (https://script.google.com/...)');
+      return;
+    }
+    // Validate data source GIDs
+    for (const [key, val] of Object.entries(localConfig.dataSources || {})) {
+      if (val && !isValidGid(val)) {
+        alert(`Data source "${key}" must be a numeric GID (e.g., "206078436")`);
+        return;
+      }
+    }
+    // Strip secrets before persisting to localStorage
+    localStorage.setItem('dashboard_config', JSON.stringify(stripSecrets(localConfig)));
     onConfigChange(localConfig);
   };
 
-  // Issue #30: Parallel connection testing for speed
   const testConnections = async () => {
+    const proxyUrl = localConfig.proxyUrl;
     const sources = localConfig.dataSources || {};
     const entries = Object.entries(sources);
     const results = {};
 
-    // Mark skips first
-    for (const [key, url] of entries) {
-      if (!url) results[key] = { status: 'skip', message: 'No URL' };
+    for (const [key, gid] of entries) {
+      if (!gid) results[key] = { status: 'skip', message: 'No GID' };
     }
     setTestResults({ ...results });
 
-    // Test all URLs in parallel
-    const testable = entries.filter(([, url]) => url);
+    if (!proxyUrl || !isAllowedProxyUrl(proxyUrl)) {
+      for (const [key] of entries.filter(([, gid]) => gid)) {
+        results[key] = { status: 'error', message: 'Invalid proxy URL' };
+      }
+      setTestResults({ ...results });
+      return;
+    }
+
+    const testable = entries.filter(([, gid]) => gid);
     const settled = await Promise.allSettled(
-      testable.map(async ([key, url]) => {
+      testable.map(async ([key, gid]) => {
+        const token = import.meta.env.VITE_PROXY_TOKEN || '';
+        const url = `${proxyUrl}?token=${encodeURIComponent(token)}&gid=${gid}`;
         const res = await fetch(url);
         if (res.ok) {
-          const text = await res.text();
-          const lines = text.split('\n').filter(l => l.trim());
-          return { key, status: 'ok', message: `${lines.length - 1} rows` };
+          const json = await res.json();
+          if (json.error) return { key, status: 'error', message: json.error };
+          const rows = Array.isArray(json) ? json.length - 1 : 0;
+          return { key, status: 'ok', message: `${rows} rows` };
         }
         return { key, status: 'error', message: `HTTP ${res.status}` };
       })
@@ -94,7 +108,6 @@ export default function SettingsPanel({ config, onConfigChange }) {
         const { key, status, message } = outcome.value;
         results[key] = { status, message };
       } else {
-        // Find which key failed
         const idx = settled.indexOf(outcome);
         results[testable[idx][0]] = { status: 'error', message: outcome.reason?.message || 'Failed' };
       }
@@ -103,7 +116,7 @@ export default function SettingsPanel({ config, onConfigChange }) {
   };
 
   const copyConfig = () => {
-    navigator.clipboard.writeText(JSON.stringify(localConfig, null, 2));
+    navigator.clipboard.writeText(JSON.stringify(stripSecrets(localConfig), null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -118,7 +131,7 @@ export default function SettingsPanel({ config, onConfigChange }) {
             { key: 'clientName', label: 'Client Name' },
             { key: 'campaignName', label: 'Campaign Name' },
             { key: 'dateRange', label: 'Date Range' },
-            { key: 'logo', label: 'Logo URL' },
+            { key: 'logo', label: 'Logo Path' },
           ].map(field => (
             <div key={field.key}>
               <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1">{field.label}</label>
@@ -136,7 +149,7 @@ export default function SettingsPanel({ config, onConfigChange }) {
       {/* Data Sources */}
       <section className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-8 space-y-5 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-[var(--color-text)]">Google Sheets CSV URLs</h2>
+          <h2 className="text-base font-semibold text-[var(--color-text)]">Sheet GIDs (tab identifiers)</h2>
           <button
             onClick={testConnections}
             className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity"
@@ -153,7 +166,7 @@ export default function SettingsPanel({ config, onConfigChange }) {
                 type="text"
                 value={localConfig.dataSources?.[key] || ''}
                 onChange={e => updateField(`dataSources.${key}`, e.target.value)}
-                placeholder="Paste Google Sheets CSV URL..."
+                placeholder="Sheet GID (e.g., 206078436)"
                 className="flex-1 bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--color-primary)]"
               />
               {testResults[key] && (

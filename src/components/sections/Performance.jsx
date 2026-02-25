@@ -3,7 +3,7 @@ import DataTable from '../charts/DataTable';
 import BarChartComponent from '../charts/BarChart';
 import EmptyState from '../ui/EmptyState';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatters';
-import { getNumericField } from '../../utils/csvParser';
+import { getNumericField, computeVCR } from '../../utils/csvParser';
 import { filterData } from '../../hooks/useFilters';
 
 export default function Performance({ sheetData, filters, branding }) {
@@ -13,8 +13,8 @@ export default function Performance({ sheetData, filters, branding }) {
     if (!general?.data?.length) return { tableData: [], targetingData: [] };
     const colMap = general.colMap;
     const filtered = filterData(general.data, filters, colMap);
-
     const liNameCol = colMap.liName;
+
     const table = filtered.map(row => ({
       liName: liNameCol ? row[liNameCol] : 'Unknown',
       channelType: row._parsed?.channelType || '',
@@ -25,14 +25,9 @@ export default function Performance({ sheetData, filters, branding }) {
       conversions: getNumericField(row, colMap, 'conversions'),
       videoCompletions: getNumericField(row, colMap, 'videoCompletions'),
       videoStarts: getNumericField(row, colMap, 'videoStarts'),
-      vcr: (() => {
-        const starts = getNumericField(row, colMap, 'videoStarts');
-        const comps = getNumericField(row, colMap, 'videoCompletions');
-        return starts > 0 ? comps / starts : 0;
-      })(),
+      vcr: computeVCR(row, colMap),
     }));
 
-    // Aggregate by targeting
     const targAgg = {};
     for (const row of table) {
       const key = row.targeting || 'Other';
@@ -63,25 +58,9 @@ export default function Performance({ sheetData, filters, branding }) {
   return (
     <div className="space-y-12">
       {targetingData.length > 0 && (
-        <BarChartComponent
-          data={targetingData}
-          bars={[{ key: 'impressions', label: 'Impressions' }]}
-          xKey="name"
-          title="Impressions by Targeting Strategy"
-          layout="horizontal"
-          height={Math.max(300, targetingData.length * 35)}
-          branding={branding}
-          colorPerBar
-        />
+        <BarChartComponent data={targetingData} bars={[{ key: 'impressions', label: 'Impressions' }]} xKey="name" title="Impressions by Targeting Strategy" layout="horizontal" height={Math.max(300, targetingData.length * 35)} branding={branding} colorPerBar />
       )}
-
-      <DataTable
-        data={tableData}
-        columns={columns}
-        title="Line Item Performance"
-        maxRows={100}
-        defaultSort={{ key: 'impressions', direction: 'desc' }}
-      />
+      <DataTable data={tableData} columns={columns} title="Line Item Performance" maxRows={100} defaultSort={{ key: 'impressions', direction: 'desc' }} />
     </div>
   );
 }

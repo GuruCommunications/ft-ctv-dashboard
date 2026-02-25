@@ -4,7 +4,7 @@ import DonutChart from '../charts/DonutChart';
 import DataTable from '../charts/DataTable';
 import EmptyState from '../ui/EmptyState';
 import { formatNumber, formatPercent } from '../../utils/formatters';
-import { getNumericField } from '../../utils/csvParser';
+import { getNumericField, computeVCR } from '../../utils/csvParser';
 
 export default function ChannelBreakdown({ sheetData, filters, branding }) {
   const channel = sheetData?.channel;
@@ -22,13 +22,7 @@ export default function ChannelBreakdown({ sheetData, filters, branding }) {
       conversions: getNumericField(row, colMap, 'conversions'),
       videoStarts: getNumericField(row, colMap, 'videoStarts'),
       videoCompletions: getNumericField(row, colMap, 'videoCompletions'),
-      vcr: (() => {
-        const vcrVal = getNumericField(row, colMap, 'vcr');
-        if (vcrVal > 0) return vcrVal;
-        const starts = getNumericField(row, colMap, 'videoStarts');
-        const comps = getNumericField(row, colMap, 'videoCompletions');
-        return starts > 0 ? comps / starts : 0;
-      })(),
+      vcr: computeVCR(row, colMap),
     })).filter(r => r.impressions > 0);
   }, [channel]);
 
@@ -53,29 +47,10 @@ export default function ChannelBreakdown({ sheetData, filters, branding }) {
   return (
     <div className="space-y-12">
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: '32px' }}>
-        <BarChartComponent
-          data={chartData}
-          bars={[{ key: 'impressions', label: 'Impressions' }]}
-          xKey="supplier"
-          title="CTV Supplier by Impressions"
-          layout="horizontal"
-          height={Math.max(300, chartData.length * 35)}
-          branding={branding}
-          colorPerBar
-        />
-        <DonutChart
-          data={donutData}
-          title="Impression Share by Supplier"
-          branding={branding}
-        />
+        <BarChartComponent data={chartData} bars={[{ key: 'impressions', label: 'Impressions' }]} xKey="supplier" title="CTV Supplier by Impressions" layout="horizontal" height={Math.max(300, chartData.length * 35)} branding={branding} colorPerBar />
+        <DonutChart data={donutData} title="Impression Share by Supplier" branding={branding} />
       </div>
-
-      <DataTable
-        data={tableData}
-        columns={columns}
-        title="Channel Performance Details"
-        defaultSort={{ key: 'impressions', direction: 'desc' }}
-      />
+      <DataTable data={tableData} columns={columns} title="Channel Performance Details" defaultSort={{ key: 'impressions', direction: 'desc' }} />
     </div>
   );
 }

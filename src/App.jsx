@@ -14,22 +14,46 @@ import Demographics from './components/sections/Demographics';
 import GeographicView from './components/sections/GeographicView';
 import SettingsPanel from './components/settings/SettingsPanel';
 import LoadingState from './components/ui/LoadingState';
+import ErrorState from './components/ui/ErrorState';
 import { useSheetData } from './hooks/useSheetData';
 import { useFilters } from './hooks/useFilters';
 import { useDerivedMetrics } from './hooks/useDerivedMetrics';
 import { applyTheme } from './utils/theme';
-import { exportToPDF } from './utils/pdfExport';
 import { parseDate } from './utils/dataTransformers';
+import { safeParseJSON, stripSecrets } from './utils/helpers';
 
 import defaultConfig from './config/clients/fountain-tire.json';
 
-class ErrorBoundary extends Component {
+// ─── Per-section error boundary ───
+class SectionErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <ErrorState
+          message="This section encountered an error. Try refreshing the page."
+          onRetry={() => this.setState({ hasError: false })}
+        />
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Top-level error boundary ───
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
   render() {
     if (this.state.hasError) {
@@ -37,7 +61,9 @@ class ErrorBoundary extends Component {
         <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
           <div className="text-center space-y-4 max-w-md bg-white rounded-xl p-10 shadow-lg">
             <h1 className="text-xl font-bold text-[var(--color-text)]">Something went wrong</h1>
-            <p className="text-sm text-[var(--color-text-muted)]">{this.state.error?.message}</p>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              An unexpected error occurred. Please try refreshing the page.
+            </p>
             <button
               onClick={() => { localStorage.removeItem('dashboard_config'); window.location.reload(); }}
               className="px-6 py-3 text-sm font-semibold rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90"
@@ -52,22 +78,12 @@ class ErrorBoundary extends Component {
   }
 }
 
-function safeParseJSON(str, fallback) {
-  try {
-    return str ? JSON.parse(str) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-// Config version — bump this when the default config changes significantly
-// (e.g. branding overhaul). This forces stale cached configs to be replaced.
-const CONFIG_VERSION = 7;
+// Config version — bump to force stale cached configs to be replaced.
+const CONFIG_VERSION = 8;
 
 function getInitialConfig() {
   const storedVersion = localStorage.getItem('dashboard_config_version');
   if (storedVersion !== String(CONFIG_VERSION)) {
-    // Clear ALL stale data — config + CSV caches
     try {
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
@@ -86,7 +102,6 @@ function getInitialConfig() {
 
 function Dashboard() {
   const [config, setConfig] = useState(getInitialConfig);
-
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -124,20 +139,15 @@ function Dashboard() {
     };
   }, [sheetData?.dailyConversions]);
 
-  // Auto-populate date range when entering Conversions tab;
-  // clear it when leaving so it doesn't silently affect other views
   const hasSetDateRef = useRef(false);
   const handleTabChange = useCallback((tab) => {
-    setActiveTab(prev => {
-      if (prev === 'conversions' && tab !== 'conversions') {
-        setDateRange([null, null]);
-        hasSetDateRef.current = false;
-      }
-      return tab;
-    });
-  }, [setDateRange]);
+    if (activeTab === 'conversions' && tab !== 'conversions') {
+      setDateRange([null, null]);
+      hasSetDateRef.current = false;
+    }
+    setActiveTab(tab);
+  }, [activeTab, setDateRange]);
 
-  // When arriving at Conversions tab with no date set, populate from data bounds
   useEffect(() => {
     if (activeTab === 'conversions' && dateBounds && !hasSetDateRef.current) {
       if (!filters.dateRange[0] && !filters.dateRange[1]) {
@@ -151,20 +161,16 @@ function Dashboard() {
 
   const availableTabs = useMemo(() => {
     const tabs = ['overview'];
-    if (sheetData?.general?.data?.length) {
-      tabs.push('performance', 'geographic');
-    }
+    if (sheetData?.general?.data?.length) tabs.push('performance', 'geographic');
     if (sheetData?.channel?.data?.length) tabs.push('channel');
     if (sheetData?.audiences?.data?.length) tabs.push('audiences');
     if (sheetData?.creative?.data?.length) tabs.push('creative');
     if (sheetData?.dailyConversions?.data?.length || sheetData?.conversionTypes?.data?.length) tabs.push('conversions');
     if (sheetData?.ltvInsights?.data?.length || sheetData?.topStations?.data?.length || sheetData?.ltvByDay?.data?.length) tabs.push('linearTV');
-
     const demoKeys = ['education', 'income', 'interests', 'prizm', 'sitesOlvDisplay'];
     if (demoKeys.some(k => sheetData?.[k]?.data?.length > 0)) tabs.push('demographics');
-
     tabs.push('settings');
-    return [...new Set(tabs)];
+    return tabs;
   }, [sheetData]);
 
   const handleConfigChange = useCallback((newConfig) => {
@@ -172,7 +178,9 @@ function Dashboard() {
     refresh();
   }, [refresh]);
 
-  const handleExport = useCallback(() => {
+  // Lazy-load PDF libraries only when user clicks export (~500KB saved from initial bundle)
+  const handleExport = useCallback(async () => {
+    const { exportToPDF } = await import('./utils/pdfExport');
     exportToPDF(config, sheetData, filters);
   }, [config, sheetData, filters]);
 
@@ -187,28 +195,33 @@ function Dashboard() {
       return <LoadingState message="Fetching campaign data..." />;
     }
 
-    switch (activeTab) {
-      case 'overview':
-        return <Overview metrics={metrics} sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'performance':
-        return <Performance sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'channel':
-        return <ChannelBreakdown sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'audiences':
-        return <AudienceInsights sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'creative':
-        return <CreativePerformance sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'conversions':
-        return <Conversions sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'linearTV':
-        return <LinearTV sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'demographics':
-        return <Demographics sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      case 'geographic':
-        return <GeographicView sheetData={sheetData} filters={filters} branding={config?.branding} />;
-      default:
-        return <Overview metrics={metrics} sheetData={sheetData} filters={filters} branding={config?.branding} />;
-    }
+    const sectionContent = (() => {
+      switch (activeTab) {
+        case 'overview':
+          return <Overview metrics={metrics} sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'performance':
+          return <Performance sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'channel':
+          return <ChannelBreakdown sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'audiences':
+          return <AudienceInsights sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'creative':
+          return <CreativePerformance sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'conversions':
+          return <Conversions sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'linearTV':
+          return <LinearTV sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'demographics':
+          return <Demographics sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        case 'geographic':
+          return <GeographicView sheetData={sheetData} filters={filters} branding={config?.branding} />;
+        default:
+          return <Overview metrics={metrics} sheetData={sheetData} filters={filters} branding={config?.branding} />;
+      }
+    })();
+
+    // Per-section error boundary — one tab crashing won't take down the whole app
+    return <SectionErrorBoundary key={activeTab}>{sectionContent}</SectionErrorBoundary>;
   };
 
   return (
@@ -268,8 +281,8 @@ function Dashboard() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
+    <AppErrorBoundary>
       <Dashboard />
-    </ErrorBoundary>
+    </AppErrorBoundary>
   );
 }

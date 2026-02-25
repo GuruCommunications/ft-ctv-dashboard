@@ -1,10 +1,11 @@
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+// Lazy-loaded: html2canvas (~222KB) + jspdf (~296KB) only imported when needed.
+// This saves ~500KB from the initial bundle.
 
-// Issue #7: Redesigned to capture the visible section properly.
-// The dashboard is a SPA with one section rendered at a time.
-// We capture what's currently visible in the main content area.
 export async function exportToPDF(config, sheetData, filters) {
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
   const pdf = new jsPDF('p', 'mm', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();

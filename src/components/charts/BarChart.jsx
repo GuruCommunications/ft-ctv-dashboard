@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   ResponsiveContainer,
   BarChart as RechartsBarChart,
@@ -26,7 +27,7 @@ const CustomTooltip = ({ active, payload, label, formatter }) => {
   );
 };
 
-export default function BarChartComponent({
+export default memo(function BarChartComponent({
   data,
   bars,
   xKey = 'name',
@@ -113,4 +114,4 @@ export default function BarChartComponent({
       </ResponsiveContainer>
     </div>
   );
-}
+});

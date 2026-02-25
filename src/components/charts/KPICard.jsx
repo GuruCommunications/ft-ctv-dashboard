@@ -1,4 +1,6 @@
-export default function KPICard({ label, value, subtitle, icon: Icon, color }) {
+import { memo } from 'react';
+
+export default memo(function KPICard({ label, value, subtitle, icon: Icon, color }) {
   const accentColor = color || 'var(--color-primary)';
   return (
     <div className="bg-white rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -19,4 +21,4 @@ export default function KPICard({ label, value, subtitle, icon: Icon, color }) {
       </div>
     </div>
   );
-}
+});

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { getChartColors } from '../../utils/theme';
 import { formatCompact } from '../../utils/formatters';
@@ -16,7 +17,7 @@ const CustomTooltip = ({ active, payload, label, formatter }) => {
   );
 };
 
-export default function TrendChart({ data, lines, xKey = 'date', height = 350, title, formatter, branding }) {
+export default memo(function TrendChart({ data, lines, xKey = 'date', height = 350, title, formatter, branding }) {
   const colors = getChartColors(branding);
 
   if (!data?.length) return null;
@@ -60,4 +61,4 @@ export default function TrendChart({ data, lines, xKey = 'date', height = 350, t
       </ResponsiveContainer>
     </div>
   );
-}
+});

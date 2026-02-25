@@ -3,7 +3,7 @@ import BarChartComponent from '../charts/BarChart';
 import DataTable from '../charts/DataTable';
 import EmptyState from '../ui/EmptyState';
 import { formatNumber, formatPercent } from '../../utils/formatters';
-import { getNumericField } from '../../utils/csvParser';
+import { getNumericField, computeVCR } from '../../utils/csvParser';
 
 function parseCreativeFormat(name) {
   if (!name) return 'Unknown';
@@ -36,13 +36,7 @@ export default function CreativePerformance({ sheetData, filters, branding }) {
       clicks: getNumericField(row, colMap, 'clicks'),
       conversions: getNumericField(row, colMap, 'conversions'),
       videoCompletions: getNumericField(row, colMap, 'videoCompletions'),
-      vcr: (() => {
-        const vcrVal = getNumericField(row, colMap, 'vcr');
-        if (vcrVal > 0) return vcrVal;
-        const starts = getNumericField(row, colMap, 'videoStarts');
-        const comps = getNumericField(row, colMap, 'videoCompletions');
-        return starts > 0 ? comps / starts : 0;
-      })(),
+      vcr: computeVCR(row, colMap),
     })).filter(r => r.impressions > 0);
   }, [creative]);
 
@@ -69,24 +63,8 @@ export default function CreativePerformance({ sheetData, filters, branding }) {
 
   return (
     <div className="space-y-12">
-      <BarChartComponent
-        data={chartData}
-        bars={[
-          { key: 'impressions', label: 'Impressions' },
-        ]}
-        xKey="name"
-        title="Impressions by Creative"
-        layout="horizontal"
-        height={Math.max(300, chartData.length * 40)}
-        branding={branding}
-      />
-
-      <DataTable
-        data={tableData}
-        columns={columns}
-        title="Creative Performance Details"
-        defaultSort={{ key: 'impressions', direction: 'desc' }}
-      />
+      <BarChartComponent data={chartData} bars={[{ key: 'impressions', label: 'Impressions' }]} xKey="name" title="Impressions by Creative" layout="horizontal" height={Math.max(300, chartData.length * 40)} branding={branding} />
+      <DataTable data={tableData} columns={columns} title="Creative Performance Details" defaultSort={{ key: 'impressions', direction: 'desc' }} />
     </div>
   );
 }

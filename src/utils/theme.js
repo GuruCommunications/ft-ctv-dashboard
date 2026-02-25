@@ -38,4 +38,3 @@ export function getChartColors(branding = {}) {
   ];
 }
 
-export { DEFAULT_BRANDING };
