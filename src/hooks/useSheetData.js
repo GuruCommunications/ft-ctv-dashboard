@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchCSV, resolveColumns } from '../utils/csvParser';
+import { fetchSheet, fetchCSV, resolveColumns } from '../utils/csvParser';
 import { enrichGeneralData, aggregateConversionTypes, aggregateConversionsByDay } from '../utils/dataTransformers';
 
 // Auto-refresh interval: 5 minutes (matches cache TTL)
@@ -21,15 +21,20 @@ export function useSheetData(config) {
       setLoading(true);
     }
     const sources = config.dataSources;
+    const proxyUrl = config.proxyUrl;
+    const proxyToken = config.proxyToken;
     const results = {};
     const errs = {};
     let anyStale = false;
 
-    const entries = Object.entries(sources).filter(([, url]) => url);
+    const entries = Object.entries(sources).filter(([, value]) => value);
 
     const settled = await Promise.allSettled(
-      entries.map(async ([key, url]) => {
-        const result = await fetchCSV(url);
+      entries.map(async ([key, value]) => {
+        // If proxy is configured and value looks like a GID (numeric), use proxy
+        const result = proxyUrl && /^\d+$/.test(value)
+          ? await fetchSheet(proxyUrl, proxyToken, value)
+          : await fetchCSV(value);
         return { key, result };
       })
     );

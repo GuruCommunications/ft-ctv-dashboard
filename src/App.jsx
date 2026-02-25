@@ -62,7 +62,7 @@ function safeParseJSON(str, fallback) {
 
 // Config version — bump this when the default config changes significantly
 // (e.g. branding overhaul). This forces stale cached configs to be replaced.
-const CONFIG_VERSION = 6;
+const CONFIG_VERSION = 7;
 
 function getInitialConfig() {
   const storedVersion = localStorage.getItem('dashboard_config_version');

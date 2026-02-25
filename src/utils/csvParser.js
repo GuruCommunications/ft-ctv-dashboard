@@ -80,11 +80,33 @@ export function getNumericField(row, colMap, alias) {
   return typeof cleaned === 'number' ? cleaned : 0;
 }
 
-export async function fetchCSV(url) {
-  if (!url) return { data: [], headers: [] };
+// Convert a 2D array (from Apps Script proxy) to row objects
+function arrayToRows(arr) {
+  if (!Array.isArray(arr) || arr.length < 2) return { data: [], headers: [] };
+  const headers = arr[0].map(h => String(h).trim());
+  const data = [];
+  for (let i = 1; i < arr.length; i++) {
+    const row = arr[i];
+    // Skip empty rows
+    if (!row || row.every(cell => cell === '' || cell == null)) continue;
+    const obj = {};
+    for (let j = 0; j < headers.length; j++) {
+      let val = j < row.length ? row[j] : null;
+      // Apps Script serializes Date objects as ISO strings — preserve as-is
+      // Numbers come through as actual numbers — no cleaning needed
+      if (val === '') val = null;
+      obj[headers[j]] = val;
+    }
+    data.push(obj);
+  }
+  return { data, headers };
+}
 
-  const cacheKey = `csv_cache_${url}`;
-  const cacheTimeKey = `csv_cache_time_${url}`;
+// Fetch data from the Apps Script proxy (JSON 2D array response)
+export async function fetchSheet(proxyUrl, token, gid) {
+  const url = `${proxyUrl}?token=${encodeURIComponent(token)}&gid=${gid}`;
+  const cacheKey = `csv_cache_${gid}`;
+  const cacheTimeKey = `csv_cache_time_${gid}`;
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   // Check cache
@@ -92,14 +114,9 @@ export async function fetchCSV(url) {
     const cachedTime = localStorage.getItem(cacheTimeKey);
     if (cachedTime && Date.now() - parseInt(cachedTime) < CACHE_DURATION) {
       const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        return parsed;
-      }
+      if (cached) return JSON.parse(cached);
     }
-  } catch (e) {
-    // Cache read failed, continue with fetch
-  }
+  } catch { /* Cache read failed, continue with fetch */ }
 
   // Fetch with retry
   let lastError;
@@ -109,19 +126,92 @@ export async function fetchCSV(url) {
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = await response.text();
-      const result = Papa.parse(text, {
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true,
+      const json = await response.json();
+
+      if (json.error) throw new Error(json.error);
+      if (!Array.isArray(json) || json.length < 2) return { data: [], headers: [] };
+
+      const { data: rawData, headers } = arrayToRows(json);
+      const colMap = resolveColumns(headers);
+
+      // Preserve date/time columns as-is; clean everything else
+      const dateColName = colMap.date;
+      const timeColName = colMap.timeOfConversion;
+      const skipClean = new Set([dateColName, timeColName].filter(Boolean));
+
+      const data = rawData.map(row => {
+        const cleaned = { ...row };
+        for (const key of Object.keys(cleaned)) {
+          if (typeof cleaned[key] === 'string' && !skipClean.has(key)) {
+            cleaned[key] = cleanValue(cleaned[key]);
+          }
+        }
+        return cleaned;
       });
 
-      if (!result.data || result.data.length === 0) {
-        return { data: [], headers: [] };
+      const output = { data, headers, colMap };
+
+      // Cache (skip large datasets)
+      try {
+        if (data.length <= 5000) {
+          localStorage.setItem(cacheKey, JSON.stringify(output));
+          localStorage.setItem(cacheTimeKey, String(Date.now()));
+        }
+      } catch {
+        try {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k?.startsWith('csv_cache_')) localStorage.removeItem(k);
+          }
+        } catch { /* ignore */ }
       }
 
-      // Clean numeric values — Issue #9: removed dead double-processing code
-      // Preserve date columns as-is so "10/21/2025" isn't destroyed by parseFloat
+      return output;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  // All retries failed — try stale cache
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      if (import.meta.env.DEV) console.warn(`[csvParser] Fetch failed for gid=${gid}, using stale cache`);
+      return { ...JSON.parse(cached), stale: true };
+    }
+  } catch { /* No cache available */ }
+
+  throw lastError;
+}
+
+// Legacy: Fetch from direct CSV URL (kept as fallback)
+export async function fetchCSV(url) {
+  if (!url) return { data: [], headers: [] };
+
+  const cacheKey = `csv_cache_${url}`;
+  const cacheTimeKey = `csv_cache_time_${url}`;
+  const CACHE_DURATION = 5 * 60 * 1000;
+
+  try {
+    const cachedTime = localStorage.getItem(cacheTimeKey);
+    if (cachedTime && Date.now() - parseInt(cachedTime) < CACHE_DURATION) {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) return JSON.parse(cached);
+    }
+  } catch { /* continue */ }
+
+  let lastError;
+  const delays = [0, 2000, 4000, 8000];
+  for (const delay of delays) {
+    if (delay > 0) await new Promise(r => setTimeout(r, delay));
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await response.text();
+      const result = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });
+
+      if (!result.data || result.data.length === 0) return { data: [], headers: [] };
+
       const headers = result.meta.fields || [];
       const colMap = resolveColumns(headers);
       const dateColName = colMap.date;
@@ -140,14 +230,12 @@ export async function fetchCSV(url) {
 
       const output = { data, headers, colMap };
 
-      // Issue #17: Skip caching for large datasets (>5000 rows) to avoid localStorage quota
       try {
         if (data.length <= 5000) {
           localStorage.setItem(cacheKey, JSON.stringify(output));
           localStorage.setItem(cacheTimeKey, String(Date.now()));
         }
-      } catch (e) {
-        // localStorage full — clear stale caches and continue
+      } catch {
         try {
           for (let i = localStorage.length - 1; i >= 0; i--) {
             const k = localStorage.key(i);
@@ -162,16 +250,13 @@ export async function fetchCSV(url) {
     }
   }
 
-  // All retries failed - try returning ANY cached data (even expired)
   try {
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
       if (import.meta.env.DEV) console.warn(`[csvParser] Fetch failed for ${url}, using stale cache`);
       return { ...JSON.parse(cached), stale: true };
     }
-  } catch (e) {
-    // No cache available
-  }
+  } catch { /* No cache */ }
 
   throw lastError;
 }
